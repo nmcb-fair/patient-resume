@@ -1,0 +1,512 @@
+---
+title: "Patient Summary"
+author: "Shuxin Zhang"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Castor data 
+```{r }
+library(readr)
+library(openxlsx)
+
+# Load Castor database
+df_me_cfs <- read_delim("input/NMCB_Study_ME_CFS_Screener_export_20260210.csv", 
+                        delim = ";", escape_double = FALSE, trim_ws = TRUE)
+
+
+```
+
+## Mapping table for "Resumé"
+```{r}
+# --- Mapping table for "Resumé" ---
+map_resume <- data.frame(
+  var  = c(
+    "Castor Participant ID",
+    "Survey Completed On",
+    "age",
+    "sex",
+    "self_bmi",
+    "calckps",
+    "phq_2_score",
+    "calccageaid",
+    "dsqsf_cdc_v2",
+    "dsqsf_ccc_v1",
+    "dsqsf_iom_v1",
+    # Diagnosis variables (gmh_diagnosis01#)
+    "gmh_diagnosis01#ME/CVS",
+    "gmh_diagnosis01#Multiple Sclerose",
+    "gmh_diagnosis01#Q-koorts of Q-koortsvermoeidheidssyndroom",
+    "gmh_diagnosis01#Ziekte van Lyme of post-behandelingssyndroom van de ziekte van Lyme",
+    "gmh_diagnosis01#Post/Long COVID",
+    "gmh_diagnosis01#Ik doe mee als gezonde deelnemer",
+    # Diagnosis variables (gmh_diagnosis02#) - for Illness sheet
+    "gmh_diagnosis02#Actieve ziekte van Graves (overactieve schildklier)",
+    "gmh_diagnosis02#Astma en/of chronische bronchitis",
+    "gmh_diagnosis02#Andere longziekten (zoals COPD of emfyseem)",
+    "gmh_diagnosis02#Beroerte, bloeding in de hersenen of bloedstolsel in de hersenen (zoals TIA, CVA, cerebrale veneuze trombose)",
+    "gmh_diagnosis02#Andere hart- en vaatziekten (zoals hartaanval, hartfalen of \"etalagebenen\")",
+    "gmh_diagnosis02#Chronische infecties (zoals Hepatitis B, Hepatitis C,  Tuberculose, HIV)",
+    "gmh_diagnosis02#Chronische ontstekingsziekte of auto-immuunziekte (zoals Reuma, Lupus, Crohn, Colitus Ulcerosa, ziekte van Wegener, Hashimoto, Sjögren)",
+    "gmh_diagnosis02#Diabetes mellitus (suikerziekte)",
+    "gmh_diagnosis02#Ernstige bloedarmoede, waarvoor u behandeld moet worden",
+    "gmh_diagnosis02#Kanker of kankerbehandeling in de afgelopen 5 jaar",
+    "gmh_diagnosis02#Momenteel een ernstige psychische aandoening (zoals depressie stoornis, bipolaire stoornis, angststoornis, dwangstoornis,  psychose, eetstoornis of schizofrenie)",
+    "gmh_diagnosis02#Neurologische aandoening (zoals dementie, ziekte van Parkinson, Alzheimer, amyotrofische laterale sclerose (ALS), epilepsie, de ziekte van Huntington)",
+    "gmh_diagnosis02#Nierziekte",
+    "gmh_diagnosis02#Ziekte van Cushing of ziekte van Addison",
+    "gmh_diagnosis02#Bij mij is geen van de bovenstaande aandoeningen vastgesteld",
+    # Medication variables (meds01#) - for Medicatie sheet
+    "meds01#Antibiotica (zoals Penicilline, Amoxicilline, Doxycycline)",
+    "meds01#Anti-depressiva (stemming verhogende medicatie)",
+    "meds01#Anti-psychotica (medicijnen om psychische stoornissen te onderdrukken)",
+    "meds01#Antivirus-medicijnen (vaak eindigend op \"-vir\", of bijvoorbeeld medicijnen zoals PREP)",
+    "meds01#Bloeddruk- en/of hartmedicatie",
+    "meds01#Bloedverdunners",
+    "meds01#Medicijnen om het immuunsysteem te onderdrukken (zogenaamde immunosuppressiva, vaak eindigend op \"-mab\")",
+    "meds01#Orale anticonceptie: \"de pil\"",
+    "meds01#Overgangs hormonen",
+    "meds01#Plas-medicijnen (Diuretica)",
+    "meds01#Sterke pijnstillers (die tot de morfine groep behoren, zoals Oxicodon, Morfine, Fentanyl, Tramadol, Codeïne)",
+    "meds01#Andere pijnstillers (zoals Aspirine, Ibuprofen, diclofenac)",
+    "meds01#Steroïd-hormonen (zoals Prednison, Cortisol, Testosteron)",
+    "meds01#Vaccinaties (zoals de griepprik, reizigersvaccinatie of COVID)",
+    "meds01#Ik heb de afgelopen 3 maanden geen van de bovenstaande medicijnen gebruikt",
+    # Additional medication text
+    "meds02"
+  ),
+  cell = c(
+    "C2",      # Castor Participant ID (changed from E2)
+    "C3",      # Survey Completed On
+    "F3",      # age
+    "G3",      # sex
+    "D15",     # self_bmi
+    "D16",     # calckps
+    "D17",     # phq_2_score
+    "D18",     # calccageaid
+    "E11",     # dsqsf_cdc_v2 (changed from F11)
+    "E10",     # dsqsf_ccc_v1 (changed from F10)
+    "E13",     # dsqsf_iom_v1 (changed from F13)
+    # Diagnosis variables - add to list in C4:G4
+    "C4:G4",   # gmh_diagnosis01#ME/CVS
+    "C4:G4",   # gmh_diagnosis01#Multiple Sclerose
+    "C4:G4",   # gmh_diagnosis01#Q-koorts of Q-koortsvermoeidheidssyndroom
+    "C4:G4",   # gmh_diagnosis01#Ziekte van Lyme...
+    "C4:G4",   # gmh_diagnosis01#Post/Long COVID
+    "C4:G4",   # gmh_diagnosis01#Ik doe mee als gezonde deelnemer
+    # Diagnosis variables - add to Illness sheet
+    "Illness", # gmh_diagnosis02# variables go to Illness sheet
+    "Illness",
+    "Illness",
+    "Illness",
+    "Illness",
+    "Illness",
+    "Illness",
+    "Illness",
+    "Illness",
+    "Illness",
+    "Illness",
+    "Illness",
+    "Illness",
+    "Illness",
+    "Illness",
+    # Medication variables - add to Medicatie sheet
+    "Medicatie", # meds01# variables go to Medicatie sheet
+    "Medicatie",
+    "Medicatie",
+    "Medicatie",
+    "Medicatie",
+    "Medicatie",
+    "Medicatie",
+    "Medicatie",
+    "Medicatie",
+    "Medicatie",
+    "Medicatie",
+    "Medicatie",
+    "Medicatie",
+    "Medicatie",
+    "Medicatie", # meds01#Ik heb de afgelopen 3 maanden geen van de bovenstaande medicijnen gebruikt
+    # Additional medication text
+    "Medicatie"  # meds02 goes to Medicatie sheet
+  ),
+  op = c(
+    NA,                    # Castor Participant ID
+    NA,                    # Survey Completed On
+    NA,                    # age
+    "vrouw_man",           # sex
+    "no_decimal",          # self_bmi (new operation)
+    NA,                    # calckps
+    NA,                    # phq_2_score
+    NA,                    # calccageaid
+    "ja_nee",              # dsqsf_cdc_v2
+    "ja_nee",              # dsqsf_ccc_v1
+    "ja_nee",              # dsqsf_iom_v1
+    # Diagnosis variables - extract text after # and add to list
+    "add_to_list",         # gmh_diagnosis01#ME/CVS
+    "add_to_list",         # gmh_diagnosis01#Multiple Sclerose
+    "add_to_list",         # gmh_diagnosis01#Q-koorts...
+    "add_to_list",         # gmh_diagnosis01#Ziekte van Lyme...
+    "add_to_list",         # gmh_diagnosis01#Post/Long COVID
+    "add_to_list",         # gmh_diagnosis01#Ik doe mee als gezonde deelnemer
+    # Diagnosis variables - extract text and add to Illness sheet
+    "add_to_sheet",        # gmh_diagnosis02# variables
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    # Medication variables - extract text and add to Medicatie sheet
+    "add_to_sheet",        # meds01# variables
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",
+    "add_to_sheet",        # meds01#Ik heb de afgelopen 3 maanden geen van de bovenstaande medicijnen gebruikt
+    # Additional medication text - add directly
+    "add_text_to_sheet"    # meds02 (add text directly, not extract from var name)
+  ),
+  stringsAsFactors = FALSE
+)
+```
+
+## Define some functions
+```{r}
+# --- Helpers (same idea as your other project) ---
+excel_col_to_num <- function(col_letters) {
+  letters_vec <- strsplit(toupper(col_letters), "")[[1]]
+  nums <- match(letters_vec, LETTERS)
+  Reduce(function(a, b) a * 26 + b, nums, init = 0)
+}
+
+cell_to_rowcol <- function(cell) {
+  cell <- toupper(cell)
+  col_letters <- gsub("[0-9]", "", cell)
+  row_numbers <- as.integer(gsub("[A-Z]", "", cell))
+
+  list(row = row_numbers, col = excel_col_to_num(col_letters))
+}
+
+# 1/0 -> ja/nee for selected vars
+to_ja_nee <- function(x) {
+  if (is.na(x) || x == "") return(NA)
+  # handle numeric/logical/character "0"/"1"
+  if (isTRUE(x == 1) || identical(as.character(x), "1")) return("ja")
+  if (isTRUE(x == 0) || identical(as.character(x), "0")) return("nee")
+  # fallback (keep original if it's something else)
+  x
+}
+
+to_vrouw_man <- function(x) {
+  if (is.na(x) || x == "") return(NA)
+
+  if (isTRUE(x == 1) || identical(as.character(x), "1")) return("vrouw")
+  if (isTRUE(x == 0) || identical(as.character(x), "0")) return("man")
+
+  # fallback (keep original if already text)
+  x
+}
+
+# Remove decimals from BMI
+to_no_decimal <- function(x) {
+  if (is.na(x) || x == "") return(NA)
+  as.integer(round(as.numeric(x)))
+}
+
+# Pre-compute text mappings for efficiency
+DIAGNOSIS01_MAPPINGS <- list(
+  "gmh_diagnosis01#ME/CVS" = "ME/CVS",
+  "gmh_diagnosis01#Multiple Sclerose" = "Multiple Sclerose",
+  "gmh_diagnosis01#Q-koorts of Q-koortsvermoeidheidssyndroom" = "Q-koorts of Q-koorts",
+  "gmh_diagnosis01#Ziekte van Lyme of post-behandelingssyndroom van de zi" = "Lyme",
+  "gmh_diagnosis01#Post/Long COVID" = "Post-COVID",
+  "gmh_diagnosis01#Ik doe mee als gezonde deelnemer" = "Gezonde deelnemer"
+)
+
+# Get text to add based on variable name and operation (optimized)
+get_text_to_add <- function(var_name, value) {
+  # Fast check for empty/zero values
+  if (is.na(value) || value == "" || value == 0) return(NULL)
+  
+  # Check if value is 1 (should add)
+  if (!(isTRUE(value == 1) || identical(as.character(value), "1"))) {
+    return(NULL)
+  }
+  
+  # Check special mappings first (faster than grepl)
+  if (var_name %in% names(DIAGNOSIS01_MAPPINGS)) {
+    return(DIAGNOSIS01_MAPPINGS[[var_name]])
+  }
+  
+  # Extract text after # for other variables
+  if (grepl("#", var_name, fixed = TRUE)) {
+    parts <- strsplit(var_name, "#", fixed = TRUE)[[1]]
+    if (length(parts) > 1) {
+      return(parts[2])
+    }
+  }
+  
+  return(NULL)
+}
+
+```
+
+
+## Define export function
+```{r}
+export_participants_resume <- function(df, ids, map,
+                                       template_path,
+                                       sheet = "Resumé",
+                                       out_dir = "exports_resume",
+                                       id_col = "Castor Participant ID",
+                                       on_duplicate = c("first", "all", "error")) {
+
+  on_duplicate <- match.arg(on_duplicate)
+  dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+
+  # Normalize variable names: remove quotes, trim whitespace
+  normalize_var_name <- function(x) {
+    gsub('^"|"$', '', trimws(x))
+  }
+  
+  df_vars_normalized <- normalize_var_name(names(df))
+  names(df) <- df_vars_normalized  # Update df column names to normalized versions
+  
+  map_vars_normalized <- normalize_var_name(map$var)
+  map$var <- map_vars_normalized  # Update mapping variable names
+  
+  for (i in seq_along(map$var)) {
+    map_var <- map$var[i]
+    if (!map_var %in% df_vars_normalized) {
+      # Try partial match - check if map_var is a prefix of any df_var
+      matches <- df_vars_normalized[startsWith(df_vars_normalized, map_var)]
+      if (length(matches) == 0) {
+        # Try reverse - check if any df_var starts with map_var base (before #)
+        base_name <- gsub("#.*", "", map_var)
+        matches <- df_vars_normalized[startsWith(df_vars_normalized, base_name)]
+      }
+      if (length(matches) > 0) {
+        map$var[i] <- matches[1]  # Update mapping to use matched variable
+      }
+    }
+  }
+  
+  map2 <- map[map$var %in% df_vars_normalized, , drop = FALSE]
+  missing_map_vars <- setdiff(map$var, map2$var)
+  
+  if (length(missing_map_vars) > 0) {
+    warning("These mapped variables are not in df and will be skipped:\n- ",
+            paste(missing_map_vars, collapse = "\n- "))
+  }
+
+  # Normalize id_col as well
+  id_col_normalized <- normalize_var_name(id_col)
+  if (!id_col_normalized %in% names(df)) {
+    # Try original id_col if normalized doesn't work
+    if (!id_col %in% names(df)) {
+      stop("id_col not found in df: ", id_col)
+    }
+    id_col_normalized <- id_col
+  }
+
+  # Pre-compute cell coordinates for direct mappings (avoid repeated calculations)
+  direct_mappings <- map2[is.na(map2$op) | !map2$op %in% c("add_to_list", "add_to_sheet", "add_text_to_sheet"), ]
+  if (nrow(direct_mappings) > 0) {
+    direct_mappings$row <- NA_integer_
+    direct_mappings$col <- NA_integer_
+    for (i in seq_len(nrow(direct_mappings))) {
+      rc <- cell_to_rowcol(direct_mappings$cell[i])
+      direct_mappings$row[i] <- rc$row
+      direct_mappings$col[i] <- rc$col
+    }
+  }
+  
+  # Pre-compute C4 coordinates for diagnosis list
+  c4_rc <- cell_to_rowcol("C4")
+
+  for (id in ids) {
+
+    idx <- which(df[[id_col_normalized]] == id)
+
+    if (length(idx) == 0) {
+      warning("ID not found, skipped: ", id)
+      next
+    }
+
+    if (length(idx) > 1) {
+      if (on_duplicate == "error") stop("Duplicate rows found for ID: ", id)
+      if (on_duplicate == "first") idx <- idx[1]
+    }
+
+    for (j in idx) {
+
+      # Load workbook (necessary for each participant to get fresh copy)
+      wb <- loadWorkbook(template_path)
+      
+      # Initialize lists for collecting text to add (use list for efficiency)
+      diagnosis_list <- list()  # For C4:G4 range
+      illness_items <- list()   # For Illness sheet
+      medicatie_items <- list() # For Medicatie sheet
+      
+      # Prepare batch write data for direct mappings
+      write_rows <- integer(0)
+      write_cols <- integer(0)
+      write_values <- list()
+
+      # Process all mappings
+      for (k in seq_len(nrow(map2))) {
+
+        v <- df[[map2$var[k]]][j]
+        var_name <- map2$var[k]
+        cell_target <- map2$cell[k]
+        op <- map2$op[k]
+
+        # Handle different operation types
+        if (!is.na(op) && op == "add_to_list") {
+          text_to_add <- get_text_to_add(var_name, v)
+          if (!is.null(text_to_add)) {
+            diagnosis_list[[length(diagnosis_list) + 1]] <- text_to_add
+          }
+          next
+        }
+        
+        if (!is.na(op) && op == "add_to_sheet") {
+          text_to_add <- get_text_to_add(var_name, v)
+          if (!is.null(text_to_add)) {
+            if (cell_target == "Illness") {
+              illness_items[[length(illness_items) + 1]] <- text_to_add
+            } else if (cell_target == "Medicatie") {
+              medicatie_items[[length(medicatie_items) + 1]] <- text_to_add
+            }
+          }
+          next
+        }
+        
+        if (!is.na(op) && op == "add_text_to_sheet") {
+          if (!is.na(v) && v != "") {
+            if (cell_target == "Medicatie") {
+              medicatie_items[[length(medicatie_items) + 1]] <- as.character(v)
+            }
+          }
+          next
+        }
+
+        # Skip if value is empty
+        if (is.na(v) || v == "") next
+
+        # Apply optional operation
+        if (!is.na(op) && op == "ja_nee") {
+          v <- to_ja_nee(v)
+          if (is.na(v) || v == "") next
+        } else if (!is.na(op) && op == "vrouw_man") {
+          v <- to_vrouw_man(v)
+          if (is.na(v) || v == "") next
+        } else if (!is.na(op) && op == "no_decimal") {
+          v <- to_no_decimal(v)
+          if (is.na(v)) next
+        }
+
+        # Collect for batch write
+        direct_idx <- match(var_name, direct_mappings$var)
+        if (!is.na(direct_idx)) {
+          write_rows <- c(write_rows, direct_mappings$row[direct_idx])
+          write_cols <- c(write_cols, direct_mappings$col[direct_idx])
+          write_values[[length(write_values) + 1]] <- v
+        }
+      }
+      
+      # Batch write all direct mappings at once
+      if (length(write_values) > 0) {
+        for (i in seq_along(write_values)) {
+          writeData(
+            wb, sheet = sheet, x = write_values[[i]],
+            startRow = write_rows[i], startCol = write_cols[i],
+            colNames = FALSE
+          )
+        }
+      }
+      
+      # Write diagnosis list to C4:G4 range
+      if (length(diagnosis_list) > 0) {
+        diagnosis_text <- paste(unlist(diagnosis_list), collapse = ", ")
+        writeData(
+          wb, sheet = sheet, x = diagnosis_text,
+          startRow = c4_rc$row, startCol = c4_rc$col,
+          colNames = FALSE
+        )
+      }
+      
+      # Batch write to Illness sheet
+      if (length(illness_items) > 0) {
+        if (!"Illness" %in% names(wb)) {
+          addWorksheet(wb, "Illness")
+        }
+        # Write all items at once using a data frame
+        writeData(
+          wb, sheet = "Illness", 
+          x = data.frame(Item = unlist(illness_items), stringsAsFactors = FALSE),
+          startRow = 2, startCol = 1,
+          colNames = FALSE
+        )
+      }
+      
+      # Batch write to Medicatie sheet
+      if (length(medicatie_items) > 0) {
+        if (!"Medicatie" %in% names(wb)) {
+          addWorksheet(wb, "Medicatie")
+        }
+        # Write all items at once using a data frame
+        writeData(
+          wb, sheet = "Medicatie",
+          x = data.frame(Item = unlist(medicatie_items), stringsAsFactors = FALSE),
+          startRow = 2, startCol = 1,
+          colNames = FALSE
+        )
+      }
+
+      safe_id <- gsub("[^A-Za-z0-9_\\-]+", "_", as.character(id))
+      suffix  <- if (length(idx) > 1) paste0("_row", j) else ""
+      out_file <- file.path(out_dir, paste0("Participant_", safe_id, suffix, ".xlsx"))
+
+      saveWorkbook(wb, out_file, overwrite = TRUE)
+    }
+  }
+
+  invisible(NULL)
+}
+```
+
+## Run 
+```{r}
+# Example run
+export_participants_resume(
+  df = df_me_cfs,
+  ids = c("1000175", "0000005", "0000007"),
+  map = map_resume,
+  template_path = "template/template.xlsx",
+  sheet = "Resumé"
+)
+```
+
+

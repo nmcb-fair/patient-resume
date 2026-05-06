@@ -1,0 +1,10 @@
+.DS_Store
+.Rhistory
+.RData
+.Rproj.user/
+.cursor/
+*.Rproj
+
+# Local/generated data artifacts
+input/**
+exports_resume/**
