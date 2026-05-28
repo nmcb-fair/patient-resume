@@ -35,7 +35,7 @@ source("05_export_function.R")
 use_random_ids <- FALSE
 
 # Manual participant IDs (used when use_random_ids = FALSE)
-participant_ids_manual <- c("1001816")
+participant_ids_manual <- c("1001880")
 
 # Random selection settings (used when use_random_ids = TRUE)
 n_random_participants <- 50

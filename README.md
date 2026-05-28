@@ -6,12 +6,12 @@ This project automates the generation of patient summary Excel files from Castor
 
 The project is organized into modular R scripts:
 
-- **`01_load_libraries.R`** - Loads required R packages (readr, openxlsx)
-- **`02_load_data.R`** - Loads CSV data from Castor exports
-- **`03_mapping.R`** - Defines the variable-to-cell mapping configuration
-- **`04_helper_functions.R`** - Helper functions for Excel operations and data transformations
-- **`05_export_function.R`** - Main export function that generates Excel files
-- **`run_all.R`** - Main script that sources all modules and runs the export
+- `**01_load_libraries.R**` - Loads required R packages (readr, openxlsx)
+- `**02_load_data.R**` - Loads CSV data from Castor exports
+- `**03_mapping.R**` - Defines the variable-to-cell mapping configuration
+- `**04_helper_functions.R**` - Helper functions for Excel operations and data transformations
+- `**05_export_function.R**` - Main export function that generates Excel files
+- `**run_all.R**` - Main script that sources all modules and runs the export
 
 ## Quick Start
 
@@ -24,12 +24,14 @@ source("run_all.R")
 ### Option 2: Customize and run
 
 Edit `run_all.R` to modify:
+
 - Participant IDs to process
 - Template path
 - Output directory
 - Sheet name
 
 Then run:
+
 ```r
 source("run_all.R")
 ```
@@ -56,7 +58,7 @@ export_participants_resume(
 ## Input Files
 
 - **Main screening data**: latest `NMCB_Study_ME_CFS_Screener_*export_*.csv/.xlsx` in `input/screening/` (df_me_cfs)
-- **Visit data**: latest `NMCB_Study_*export_*.csv/.xlsx` in `input/visit/` (df_visit) – hgs average → D26 and `visit_meds*` medication fields
+- **Visit data**: latest `NMCB_Study_*export_*.csv/.xlsx` in `input/visit/` (df_visit) – hgs average → D26 and `visit_meds`* medication fields
 - **Measurements/Questionnaires (legacy)**: latest `NMCB_Measurements_Questionnaires_*export_*.csv/.xlsx` in `input/visit/` or `input/` (df_measurements) – fallback source for older participants (including medication fields)
 - **DSQ2 symptoms**: latest `NMCB_Study_Symptomen_frequentie_en_ernst_hiervan_*export_*.csv/.xlsx` in `input/dsq_2/` (df_dsq2) – Survey Progress → D30
 - **Vragenlijsten (optional supplemental Castor source)**: latest `NMCB_Study_Vragenlijsten_*export_*.csv/.xlsx` in `input/vragenlijsten/` (df_vragenlijsten)
@@ -82,16 +84,16 @@ The main script is `run_all.R`. It loads all modules in order, defines which par
 2. `02_load_data.R` reads the Castor exports and supporting files from `input/`.
 3. `03_mapping.R` defines `map_resume`, which maps source variables to Excel cells or output sheets.
 4. `04_helper_functions.R` provides reusable helpers for:
-   - Excel cell parsing (`C4` -> row/column)
-   - value conversion (`1/0` -> `ja/nee`, sex code -> `vrouw/man`)
-   - diagnosis text extraction
+  - Excel cell parsing (`C4` -> row/column)
+  - value conversion (`1/0` -> `ja/nee`, sex code -> `vrouw/man`)
+  - diagnosis text extraction
 5. `05_export_function.R` loops over participant IDs and, for each participant:
-   - loads the Excel template
-   - copies mapped values into the main `Resumé` sheet
-   - builds diagnosis, illness, and medication lists
-   - fills additional fields from other datasets
-   - writes extra sheets such as `NASA test` and `Laboratorium`
-   - saves the result as `Participant_<ID>.xlsx`
+  - loads the Excel template
+  - copies mapped values into the main `Resumé` sheet
+  - builds diagnosis, illness, and medication lists
+  - fills additional fields from other datasets
+  - writes extra sheets such as `NASA test` and `Laboratorium`
+  - saves the result as `Participant_<ID>.xlsx`
 
 ### External Data Sources Used During Export
 
@@ -213,3 +215,4 @@ An older R Markdown version of the workflow kept for reference. The current modu
 - The original R Markdown file (`generate_patient_resume.Rmd`) is preserved for reference
 - All modules must be sourced in order (01 → 05)
 - The `run_all.R` script provides a convenient way to run everything with one command
+

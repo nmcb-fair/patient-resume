@@ -27,6 +27,92 @@ read_castor_export <- function(path, preferred_sheet = "Study results") {
   read_delim(path, delim = ";", escape_double = FALSE, trim_ws = TRUE)
 }
 
+read_excel_any_sheet <- function(path, preferred_sheet = "Blad1", sep_names = " ") {
+  if (is.na(path) || is.null(path) || path == "" || !file.exists(path)) return(NULL)
+  sheet_names <- getSheetNames(path)
+  if (length(sheet_names) == 0) return(NULL)
+  target_sheet <- if (preferred_sheet %in% sheet_names) preferred_sheet else sheet_names[1]
+  read.xlsx(path, sheet = target_sheet, sep.names = sep_names)
+}
+
+normalize_names <- function(nm) {
+  gsub('^"|"$', '', trimws(nm))
+}
+
+find_id_col_name <- function(nm) {
+  for (cand in c("Castor Participant ID", "Participant Id", "Participant ID", "Castor.ID", "Castor ID")) {
+    if (cand %in% nm) return(cand)
+  }
+  id_idx <- grep("Castor.*Participant|Participant.*ID|Castor[\\. ]?ID|Participant Id",
+                 nm, ignore.case = TRUE)[1]
+  if (!is.na(id_idx)) return(nm[id_idx])
+  NA_character_
+}
+
+bind_rows_fill <- function(dfs) {
+  dfs <- Filter(Negate(is.null), dfs)
+  if (length(dfs) == 0) return(NULL)
+  all_cols <- unique(unlist(lapply(dfs, names), use.names = FALSE))
+  out <- lapply(dfs, function(d) {
+    miss <- setdiff(all_cols, names(d))
+    if (length(miss) > 0) d[miss] <- NA
+    d[, all_cols, drop = FALSE]
+  })
+  do.call(rbind, out)
+}
+
+collapse_first_non_missing_by_id <- function(df, id_col = "Castor Participant ID") {
+  if (is.null(df) || nrow(df) == 0 || !(id_col %in% names(df))) return(df)
+  ids <- as.character(trimws(df[[id_col]]))
+  keep <- !is.na(ids) & ids != ""
+  df <- df[keep, , drop = FALSE]
+  ids <- ids[keep]
+  if (length(ids) == 0) return(df[0, , drop = FALSE])
+
+  is_missing <- function(x) {
+    if (length(x) == 0 || is.na(x)) return(TRUE)
+    if (is.character(x)) return(trimws(x) == "")
+    FALSE
+  }
+
+  unique_ids <- unique(ids)
+  rows <- vector("list", length(unique_ids))
+  for (i in seq_along(unique_ids)) {
+    pid <- unique_ids[i]
+    idx <- which(ids == pid)
+    row_out <- df[idx[1], , drop = FALSE]
+    if (length(idx) > 1) {
+      for (j in idx[-1]) {
+        row_j <- df[j, , drop = FALSE]
+        for (col_nm in names(row_out)) {
+          if (is_missing(row_out[[col_nm]][1]) && !is_missing(row_j[[col_nm]][1])) {
+            row_out[[col_nm]][1] <- row_j[[col_nm]][1]
+          }
+        }
+      }
+    }
+    rows[[i]] <- row_out
+  }
+  do.call(rbind, rows)
+}
+
+load_latest_screener <- function(dir_paths, pattern, fallback_paths = character(0), required = FALSE) {
+  fp <- resolve_latest_file(dir_paths, pattern, fallback_paths = fallback_paths, required = required)
+  if (is.na(fp) || !nzchar(fp) || !file.exists(fp)) return(NULL)
+  df <- read_castor_export(fp)
+  if (is.null(df) || nrow(df) == 0) return(NULL)
+  names(df) <- normalize_names(names(df))
+  id_col <- find_id_col_name(names(df))
+  if (is.na(id_col)) {
+    warning("Screener file loaded but no participant ID column found: ", fp)
+    return(NULL)
+  }
+  if (id_col != "Castor Participant ID") {
+    names(df)[names(df) == id_col] <- "Castor Participant ID"
+  }
+  df
+}
+
 # BMI from any NMCB Screener export in screening/ (newest file wins per ID).
 # Resolves column "bmi" if present, else "self_bmi", else "self_bmi_1" (Post-COVID / Lyme).
 build_screening_bmi_from_dir <- function(dir_path) {
@@ -124,17 +210,55 @@ visit_dir <- "input/visit"
 dsq2_dir <- "input/dsq_2"
 vragenlijsten_dir <- "input/vragenlijsten"
 
-# Main screener data (required)
-screening_file <- resolve_latest_file(
-  c(screening_dir, "input"),
-  "^NMCB_Study_ME_CFS_Screener_(excel_)?export_.*\\.(csv|xlsx)$",
-  fallback_paths = c("input/NMCB_Study_ME_CFS_Screener_export_20260210.csv"),
-  required = TRUE
-)
-df_me_cfs <- read_castor_export(screening_file)
-
-# ME/CFS screener rows from combined Excel export (optional; fills gaps vs. CSV df_me_cfs)
+# ME/CFS screener rows from combined Excel export (optional; can also be used as main source fallback)
 df_screening_excel_me_cfs <- load_screening_excel_me_cfs(c(screening_dir, "input"))
+
+# Main screener data pool:
+# - NMCB/ME_CFS screener
+# - Lyme screener
+# - Post-COVID screener
+screener_dir_paths <- c(screening_dir, "input")
+df_screener_nmcb <- load_latest_screener(
+  screener_dir_paths,
+  "^NMCB_Study_(ME_CFS|NMCB)_Screener_(excel_)?export_.*\\.(csv|xlsx)$",
+  fallback_paths = c("input/NMCB_Study_ME_CFS_Screener_export_20260210.csv"),
+  required = FALSE
+)
+df_screener_lyme <- load_latest_screener(
+  screener_dir_paths,
+  "^NMCB_Study_Lyme_Screener_(excel_)?export_.*\\.(csv|xlsx)$",
+  required = FALSE
+)
+df_screener_post_covid <- load_latest_screener(
+  screener_dir_paths,
+  "^NMCB_Study_Post-COVID_Screener_(excel_)?export_.*\\.(csv|xlsx)$",
+  required = FALSE
+)
+
+df_me_cfs <- bind_rows_fill(list(
+  df_screener_nmcb,
+  df_screener_post_covid,
+  df_screener_lyme
+))
+
+# Broad fallback for alternate Screener names if nothing matched above
+if (is.null(df_me_cfs) || nrow(df_me_cfs) == 0) {
+  df_screener_generic <- load_latest_screener(
+    screener_dir_paths,
+    "^NMCB_Study_.*Screener_(excel_)?export_.*\\.(csv|xlsx)$",
+    required = FALSE
+  )
+  df_me_cfs <- bind_rows_fill(list(df_screener_generic))
+}
+
+if (!is.null(df_me_cfs) && nrow(df_me_cfs) > 0) {
+  df_me_cfs <- collapse_first_non_missing_by_id(df_me_cfs, id_col = "Castor Participant ID")
+} else if (!is.null(df_screening_excel_me_cfs) && nrow(df_screening_excel_me_cfs) > 0) {
+  warning("No dedicated Screener CSV/XLSX found; using ME_CFS_Screener sheet from combined screening workbook as main screener source.")
+  df_me_cfs <- df_screening_excel_me_cfs
+} else {
+  stop("No usable screener data found. Expected a file matching 'NMCB_Study_*Screener*export_*' in input/screening or input, or a ME_CFS_Screener sheet in NMCB_Screening_excel_export_*.xlsx.")
+}
 
 # Newest-per-ID BMI across all Screener exports in screening/ (fills gaps vs. df_me_cfs)
 df_screening_bmi <- build_screening_bmi_from_dir(screening_dir)
@@ -176,7 +300,24 @@ df_vragenlijsten <- read_castor_export(vragenlijsten_file)
 
 # Load CRL admin (for Patient type -> D32)
 # Use sep.names = " " to preserve spaces in column names (e.g. "Patient type" instead of "Patient.type")
-df_crl_admin <- read.xlsx("input/CRL admin/CRL_Admin.xlsx", sheet = "Blad1", sep.names = " ")
+crl_admin_file <- resolve_latest_file(
+  c("input/CRL admin", "input"),
+  "^CRL[ _].*\\.xlsx$",
+  fallback_paths = c("input/CRL admin/CRL_Admin.xlsx"),
+  required = FALSE
+)
+df_crl_admin <- read_excel_any_sheet(crl_admin_file, preferred_sheet = "Blad1", sep_names = " ")
 
 # Load NASA Lean test (for NASA test sheet)
-df_nasa_lean <- read_csv("input/Omron/NASA_LEAN_TEST.csv", show_col_types = FALSE)
+omron_file <- resolve_latest_file(
+  c("input/Omron", "input"),
+  ".*\\.(csv|CSV)$",
+  fallback_paths = c("input/Omron/NASA_LEAN_TEST.csv"),
+  required = FALSE
+)
+if (!is.na(omron_file) && nzchar(omron_file) && file.exists(omron_file)) {
+  df_nasa_lean <- read_csv(omron_file, show_col_types = FALSE)
+} else {
+  warning("No Omron/NASA CSV found; NASA sheet population will be skipped.")
+  df_nasa_lean <- NULL
+}
